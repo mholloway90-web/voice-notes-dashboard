@@ -188,6 +188,28 @@
       background: #22c55e;
       margin-right: 6px;
       vertical-align: middle;
+      .filters {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 1.5rem;
+}
+
+.filter-btn {
+  flex: 1;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid #2a2a2a;
+  background: #1a1a1a;
+  color: #666;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.filter-btn.active {
+  background: #2a2a2a;
+  color: #fff;
+  border-color: #444;
+}
     }
   </style>
 </head>
@@ -200,7 +222,13 @@
     </h1>
     <button id="refresh-btn" onclick="loadNotes()">↻ Refresh</button>
   </header>
-
+  
+<div class="filters">
+  <button class="filter-btn active" onclick="setFilter('all', this)">All</button>
+  <button class="filter-btn" onclick="setFilter('JOBSITE', this)">🏗️ Job Site</button>
+  <button class="filter-btn" onclick="setFilter('PERSONAL', this)">🧠 Personal</button>
+</div>
+  
   <div class="stats">
     <div class="stat">
       <div class="stat-value" id="total">—</div>
@@ -258,7 +286,8 @@
       container.innerHTML = '<div class="loading">Loading your notes...</div>';
 
       try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/voice_notes?select=*&order=created_at.desc&limit=50`, {
+        const filter = activeFilter === 'all' ? '' : `&note_type=eq.${activeFilter}`;
+const res = await fetch(`${SUPABASE_URL}/rest/v1/voice_notes?select=*&order=created_at.desc&limit=50${filter}`, {
           headers: {
             'apikey': SUPABASE_KEY,
             'Authorization': `Bearer ${SUPABASE_KEY}`
@@ -300,7 +329,14 @@
         container.innerHTML = `<div class="error">Failed to load notes: ${err.message}</div>`;
       }
     }
+let activeFilter = 'all';
 
+function setFilter(filter, btn) {
+  activeFilter = filter;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  loadNotes();
+}
     loadNotes();
   </script>
 
