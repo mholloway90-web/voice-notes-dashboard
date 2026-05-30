@@ -211,6 +211,17 @@
   border-color: #444;
 }
     }
+    .priority-badge {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+.priority-HIGH { background: #3a1515; color: #f87171; }
+.priority-MED { background: #3a2e15; color: #fbbf24; }
+.priority-LOW { background: #1a2e1a; color: #4ade80; }
+.priority-null { background: #1a1a1a; color: #555; }
   </style>
 </head>
 <body>
@@ -222,6 +233,18 @@
     </h1>
     <button id="refresh-btn" onclick="loadNotes()">↻ Refresh</button>
   </header>
+
+  <div class="filters">
+  <button class="filter-btn active" onclick="setFilter('all', this)">All</button>
+  <button class="filter-btn" onclick="setFilter('JOBSITE', this)">🏗️ Job Site</button>
+  <button class="filter-btn" onclick="setFilter('GENERAL', this)">🧠 General</button>
+</div>
+<div class="filters">
+  <button class="filter-btn active" onclick="setPriority('all', this)">All</button>
+  <button class="filter-btn" onclick="setPriority('HIGH', this)">🔴 High</button>
+  <button class="filter-btn" onclick="setPriority('MED', this)">🟡 Med</button>
+  <button class="filter-btn" onclick="setPriority('LOW', this)">🟢 Low</button>
+</div>
   
 <div class="filters">
   <button class="filter-btn active" onclick="setFilter('all', this)">All</button>
@@ -252,6 +275,15 @@
     const SUPABASE_URL = 'https://ecjmqwdijgsycbqkfcog.supabase.co';
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVjam1xd2RpamdzeWNicWtmY29nIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MDAxMzMxNSwiZXhwIjoyMDk1NTg5MzE1fQ.x6CP4ltoczdPZ-aV8UTci2DUSXzKlBEbubS35QKvqPY';
 
+let activePriority = 'all';
+
+function setPriority(priority, btn) {
+  activePriority = priority;
+  document.querySelectorAll('.filters:nth-child(2) .filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  loadNotes();
+}
+    
     function formatDate(ts) {
       const d = new Date(ts);
       const now = new Date();
@@ -286,6 +318,9 @@
       container.innerHTML = '<div class="loading">Loading your notes...</div>';
 
       try {
+        const typeFilter = activeFilter === 'all' ? '' : `&note_type=eq.${activeFilter}`;
+const priorityFilter = activePriority === 'all' ? '' : `&priority=eq.${activePriority}`;
+const res = await fetch(`${SUPABASE_URL}/rest/v1/voice_notes?select=*&order=created_at.desc&limit=50${typeFilter}${priorityFilter}`, {
         const filter = activeFilter === 'all' ? '' : `&note_type=eq.${activeFilter}`;
 const res = await fetch(`${SUPABASE_URL}/rest/v1/voice_notes?select=*&order=created_at.desc&limit=50${filter}`, {
           headers: {
@@ -315,6 +350,7 @@ const res = await fetch(`${SUPABASE_URL}/rest/v1/voice_notes?select=*&order=crea
             <div class="note-top">
               <div class="note-transcript collapsed" id="transcript-${n.id}">${n.transcript || 'No transcript'}</div>
               <div class="note-date">${formatDate(n.created_at)}</div>
+<span class="priority-badge priority-${n.priority || 'null'}">${n.priority || '—'}</span>
             </div>
             <div class="expand-hint" id="hint-${n.id}">Tap to expand</div>
             <div id="extraction-${n.id}" style="display:none;">
