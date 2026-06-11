@@ -1,5 +1,4 @@
 
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -53,6 +52,31 @@
     }
 
     #refresh-btn:active { opacity: 0.7; }
+
+    /* View switcher (All Notes / Open Loops) */
+    .view-switch {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 1.25rem;
+    }
+
+    .view-tab {
+      flex: 1;
+      padding: 11px;
+      border-radius: 10px;
+      border: 1px solid #2a2a2a;
+      background: #1a1a1a;
+      color: #666;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .view-tab.active {
+      background: #2a2a2a;
+      color: #fff;
+      border-color: #444;
+    }
 
     .stats {
       display: grid;
@@ -195,6 +219,80 @@
       margin-top: 8px;
     }
 
+    /* Open loops view */
+    .loops-header {
+      font-size: 13px;
+      color: #888;
+      margin-bottom: 1rem;
+    }
+
+    #loops-count { color: #fff; font-weight: 600; }
+
+    .job-group { margin-bottom: 1.5rem; }
+
+    .job-group-title {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #888;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .job-count {
+      background: #2a2a2a;
+      color: #aaa;
+      font-size: 11px;
+      padding: 1px 7px;
+      border-radius: 10px;
+    }
+
+    .loop-card {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 12px;
+      padding: 1rem;
+      margin-bottom: 10px;
+    }
+
+    .loop-summary {
+      font-size: 14px;
+      color: #ccc;
+      line-height: 1.55;
+      margin-bottom: 14px;
+    }
+
+    .loop-bottom {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .loop-date {
+      font-size: 11px;
+      color: #555;
+      white-space: nowrap;
+    }
+
+    .resolve-btn {
+      background: #16331f;
+      color: #4ade80;
+      border: 1px solid #265a35;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      min-height: 40px;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .resolve-btn:active { opacity: 0.7; }
+    .resolve-btn:disabled { opacity: 0.5; cursor: default; }
+
     .empty {
       text-align: center;
       padding: 4rem 1rem;
@@ -241,41 +339,55 @@
   <header>
     <h1>
       <span class="dot"></span>Voice Notes
-      <span>Telegram → Whisper → Claude</span>
+      <span>Telegram &rarr; Whisper &rarr; Claude</span>
     </h1>
-    <button id="refresh-btn" onclick="loadNotes()">↻ Refresh</button>
+    <button id="refresh-btn" onclick="refreshActiveView()">&#8635; Refresh</button>
   </header>
 
-  <div class="filters">
-    <button class="filter-btn active" onclick="setFilter('all', this)">All</button>
-    <button class="filter-btn" onclick="setFilter('JOBSITE', this)">🏗️ Job Site</button>
-    <button class="filter-btn" onclick="setFilter('GENERAL', this)">🧠 General</button>
+  <div class="view-switch">
+    <button class="view-tab active" onclick="switchView('notes', this)">All Notes</button>
+    <button class="view-tab" onclick="switchView('loops', this)">Open Loops</button>
   </div>
 
-  <div class="filters">
-    <button class="filter-btn active" onclick="setPriority('all', this)">All</button>
-    <button class="filter-btn" onclick="setPriority('HIGH', this)">🔴 High</button>
-    <button class="filter-btn" onclick="setPriority('MED', this)">🟡 Med</button>
-    <button class="filter-btn" onclick="setPriority('LOW', this)">🟢 Low</button>
+  <div id="notes-view">
+    <div class="filters">
+      <button class="filter-btn active" onclick="setFilter('all', this)">All</button>
+      <button class="filter-btn" onclick="setFilter('JOBSITE', this)">&#127959;&#65039; Job Site</button>
+      <button class="filter-btn" onclick="setFilter('GENERAL', this)">&#129504; General</button>
+    </div>
+
+    <div class="filters">
+      <button class="filter-btn active" onclick="setPriority('all', this)">All</button>
+      <button class="filter-btn" onclick="setPriority('HIGH', this)">&#128308; High</button>
+      <button class="filter-btn" onclick="setPriority('MED', this)">&#128993; Med</button>
+      <button class="filter-btn" onclick="setPriority('LOW', this)">&#128994; Low</button>
+    </div>
+
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-value" id="total">&mdash;</div>
+        <div class="stat-label">Total</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value" id="today">&mdash;</div>
+        <div class="stat-label">Today</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value" id="week">&mdash;</div>
+        <div class="stat-label">This week</div>
+      </div>
+    </div>
+
+    <div id="notes-container" class="notes-list">
+      <div class="loading">Loading your notes...</div>
+    </div>
   </div>
 
-  <div class="stats">
-    <div class="stat">
-      <div class="stat-value" id="total">—</div>
-      <div class="stat-label">Total</div>
+  <div id="loops-view" style="display:none;">
+    <div class="loops-header"><span id="loops-count">&mdash;</span> open loops</div>
+    <div id="loops-container" class="notes-list">
+      <div class="loading">Loading open loops...</div>
     </div>
-    <div class="stat">
-      <div class="stat-value" id="today">—</div>
-      <div class="stat-label">Today</div>
-    </div>
-    <div class="stat">
-      <div class="stat-value" id="week">—</div>
-      <div class="stat-label">This week</div>
-    </div>
-  </div>
-
-  <div id="notes-container" class="notes-list">
-    <div class="loading">Loading your notes...</div>
   </div>
 
   <script>
@@ -284,6 +396,7 @@
 
     let activeFilter = 'all';
     let activePriority = 'all';
+    let activeView = 'notes';
 
     function setFilter(filter, btn) {
       activeFilter = filter;
@@ -297,6 +410,33 @@
       document.querySelectorAll('.filters:nth-of-type(2) .filter-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       loadNotes();
+    }
+
+    function switchView(view, btn) {
+      activeView = view;
+      document.querySelectorAll('.view-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const notesView = document.getElementById('notes-view');
+      const loopsView = document.getElementById('loops-view');
+      if (view === 'loops') {
+        notesView.style.display = 'none';
+        loopsView.style.display = 'block';
+        loadOpenLoops();
+      } else {
+        loopsView.style.display = 'none';
+        notesView.style.display = 'block';
+      }
+    }
+
+    function refreshActiveView() {
+      if (activeView === 'loops') loadOpenLoops();
+      else loadNotes();
+    }
+
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[c]));
     }
 
     function formatDate(ts) {
@@ -379,6 +519,117 @@
       } catch (err) {
         container.innerHTML = `<div class="error">Failed to load notes: ${err.message}</div>`;
       }
+    }
+
+    async function loadOpenLoops() {
+      const container = document.getElementById('loops-container');
+      container.innerHTML = '<div class="loading">Loading open loops...</div>';
+
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/voice_notes?select=*&is_open_loop=is.true&loop_resolved=not.is.true&order=created_at.desc`, {
+          headers: {
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_KEY}`
+          }
+        });
+
+        if (!res.ok) throw new Error(`${res.status} — ${res.statusText}`);
+        const loops = await res.json();
+
+        document.getElementById('loops-count').textContent = loops.length;
+
+        if (!loops.length) {
+          container.innerHTML = `
+            <div class="empty">
+              <div class="empty-icon">✅</div>
+              No open loops.<br>You're all caught up.
+            </div>`;
+          return;
+        }
+
+        const groups = {};
+        loops.forEach(n => {
+          const job = n.job_name || 'No job';
+          (groups[job] = groups[job] || []).push(n);
+        });
+
+        container.innerHTML = Object.keys(groups).map(job => {
+          const cards = groups[job].map(n => `
+            <div class="loop-card" id="loop-card-${n.id}">
+              <div class="loop-summary">${escapeHtml(n.claude_response || n.transcript || 'No summary')}</div>
+              <div class="loop-bottom">
+                <span class="loop-date">${formatDate(n.created_at)}</span>
+                <button class="resolve-btn" onclick="resolveLoop(${n.id}, this)">Resolve</button>
+              </div>
+            </div>
+          `).join('');
+          return `
+            <div class="job-group">
+              <div class="job-group-title">${escapeHtml(job)} <span class="job-count">${groups[job].length}</span></div>
+              ${cards}
+            </div>`;
+        }).join('');
+
+      } catch (err) {
+        container.innerHTML = `<div class="error">Failed to load open loops: ${err.message}</div>`;
+      }
+    }
+
+    async function resolveLoop(id, btnEl) {
+      btnEl.disabled = true;
+      btnEl.textContent = 'Resolving...';
+
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/voice_notes?id=eq.${id}`, {
+          method: 'PATCH',
+          headers: {
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_KEY}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=representation'
+          },
+          body: JSON.stringify({
+            loop_resolved: true,
+            resolved_at: new Date().toISOString()
+          })
+        });
+
+        if (!res.ok) throw new Error(`${res.status} — ${res.statusText}`);
+
+        const updated = await res.json();
+        if (!updated.length) {
+          throw new Error('Nothing was updated. This is usually a row level security UPDATE policy blocking the write on voice_notes.');
+        }
+
+        // Remove the resolved card, matched by its stable id.
+        const card = document.getElementById('loop-card-' + id);
+        if (card) {
+          const group = card.closest('.job-group');
+          card.remove();
+          // If that job has no remaining open loops, drop the whole group.
+          if (group && !group.querySelector('.loop-card')) group.remove();
+        }
+
+        // Update the count, and show the empty state if everything is cleared.
+        const remaining = container_loopCount();
+        document.getElementById('loops-count').textContent = remaining;
+        if (remaining === 0) {
+          document.getElementById('loops-container').innerHTML = `
+            <div class="empty">
+              <div class="empty-icon">✅</div>
+              No open loops.<br>You're all caught up.
+            </div>`;
+        }
+
+      } catch (err) {
+        btnEl.disabled = false;
+        btnEl.textContent = 'Resolve';
+        alert('Could not resolve: ' + err.message);
+      }
+    }
+
+    function container_loopCount() {
+      return document.getElementById('loops-container').querySelectorAll('.loop-card').length;
     }
 
     loadNotes();
