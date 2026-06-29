@@ -33,6 +33,13 @@ async function sendChunks(token, chatId, text) {
 
 module.exports = async (req, res) => {
   try {
+    // Secret gate: every request must carry the matching header
+    const expected = process.env.ASK_SHARED_SECRET;
+    const provided = req.headers["x-ask-secret"];
+    if (!expected || provided !== expected) {
+      return res.status(401).json({ ok: false, error: "unauthorized" });
+    }
+
     const chatId = req.query.chat_id;
     const question = req.query.q;
     if (!chatId) {
@@ -43,17 +50,6 @@ module.exports = async (req, res) => {
     }
 
     const token = process.env.TELEGRAM_BOT_TOKEN;
-
-    // Temporary test hook for chunking, removed at lockdown
-    if (question === "__chunktest__") {
-      let longText = "";
-      for (let i = 1; i <= 200; i++) {
-        longText += "Line " + i + ": test line to exercise Telegram chunking.\n";
-      }
-      const parts = await sendChunks(token, chatId, longText);
-      return res.status(200).json({ ok: true, test: true, totalChars: longText.length, parts: parts });
-    }
-
     const supabaseUrl = "https://ecjmqwdijgsycbqkfcog.supabase.co";
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     const anthropicKey = process.env.ANTHROPIC_API_KEY;
@@ -126,7 +122,7 @@ module.exports = async (req, res) => {
     // 4. Reply in Telegram, splitting long answers across messages
     const parts = await sendChunks(token, chatId, answer);
 
-    return res.status(200).json({ ok: true, parts: parts, answer: answer });
+    return res.status(200).json({ ok: true, parts: parts });
   } catch (err) {
     return res.status(500).json({ ok: false, error: String(err) });
   }
