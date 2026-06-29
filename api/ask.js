@@ -1,3 +1,36 @@
+function splitMessage(text, maxLen) {
+  const chunks = [];
+  let remaining = text;
+  while (remaining.length > maxLen) {
+    let splitAt = remaining.lastIndexOf("\n", maxLen);
+    if (splitAt <= 0) {
+      splitAt = remaining.lastIndexOf(" ", maxLen);
+    }
+    if (splitAt <= 0) {
+      splitAt = maxLen;
+    }
+    chunks.push(remaining.slice(0, splitAt));
+    remaining = remaining.slice(splitAt).replace(/^\s+/, "");
+  }
+  if (remaining.length > 0) {
+    chunks.push(remaining);
+  }
+  return chunks;
+}
+
+async function sendChunks(token, chatId, text) {
+  const chunks = splitMessage(text, 3900);
+  for (let i = 0; i < chunks.length; i++) {
+    const prefix = chunks.length > 1 ? "(" + (i + 1) + "/" + chunks.length + ")\n" : "";
+    await fetch("https://api.telegram.org/bot" + token + "/sendMessage", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, text: prefix + chunks[i] })
+    });
+  }
+  return chunks.length;
+}
+
 module.exports = async (req, res) => {
   try {
     const chatId = req.query.chat_id;
@@ -10,6 +43,17 @@ module.exports = async (req, res) => {
     }
 
     const token = process.env.TELEGRAM_BOT_TOKEN;
+
+    // Temporary test hook for chunking, removed at lockdown
+    if (question === "__chunktest__") {
+      let longText = "";
+      for (let i = 1; i <= 200; i++) {
+        longText += "Line " + i + ": test line to exercise Telegram chunking.\n";
+      }
+      const parts = await sendChunks(token, chatId, longText);
+      return res.status(200).json({ ok: true, test: true, totalChars: longText.length, parts: parts });
+    }
+
     const supabaseUrl = "https://ecjmqwdijgsycbqkfcog.supabase.co";
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     const anthropicKey = process.env.ANTHROPIC_API_KEY;
@@ -79,14 +123,10 @@ module.exports = async (req, res) => {
       .join("\n")
       .trim() || "No answer generated.";
 
-    // 4. Reply in Telegram
-    await fetch("https://api.telegram.org/bot" + token + "/sendMessage", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: chatId, text: answer })
-    });
+    // 4. Reply in Telegram, splitting long answers across messages
+    const parts = await sendChunks(token, chatId, answer);
 
-    return res.status(200).json({ ok: true, answer: answer });
+    return res.status(200).json({ ok: true, parts: parts, answer: answer });
   } catch (err) {
     return res.status(500).json({ ok: false, error: String(err) });
   }
