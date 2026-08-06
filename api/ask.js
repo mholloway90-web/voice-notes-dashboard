@@ -62,7 +62,7 @@ module.exports = async (req, res) => {
 
     // 1. Pull the most recent 200 notes
     const cols = "id,created_at,work_or_personal,sub_or_person,job_name,trade,theme,entry_type,note_type,priority,action_required,is_open_loop,loop_resolved,resolved_at,transcript,claude_response";
-    const query = supabaseUrl + "/rest/v1/voice_notes?select=" + cols + "&order=created_at.desc&limit=200";
+    const query = supabaseUrl + "/rest/v1/voice_notes?select=" + cols + "&order=created_at.desc&limit=1000";
     const dbResp = await fetch(query, {
       headers: { apikey: supabaseKey, Authorization: "Bearer " + supabaseKey }
     });
@@ -72,9 +72,21 @@ module.exports = async (req, res) => {
     }
     const notes = await dbResp.json();
 
+    // Keep the payload sane as the table grows.
+    const MAX_CHARS = 400000;
+    let running = 0;
+    const trimmed = [];
+    for (const n of notes) {
+      running += 860;
+      if (running > MAX_CHARS) break;
+      trimmed.push(n);
+    }
+
     // 2. Build a compact context, truncating any giant transcript
-    const context = notes.map(function (n) {
-      var t = (n.transcript || "").slice(0, 2000);
+    const context = trimmed.map(function (n) {
+      var t = n.loop_resolved === true
+        ? (n.transcript || "").slice(0, 200)
+        : (n.transcript || "").slice(0, 2000);
       return [
         "id:" + n.id,
         "date:" + n.created_at,
