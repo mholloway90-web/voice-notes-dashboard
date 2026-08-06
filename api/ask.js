@@ -61,7 +61,7 @@ module.exports = async (req, res) => {
     }
 
     // 1. Pull the most recent 200 notes
-    const cols = "id,created_at,work_or_personal,sub_or_person,job_name,trade,theme,entry_type,note_type,priority,action_required,is_open_loop,transcript,claude_response";
+    const cols = "id,created_at,work_or_personal,sub_or_person,job_name,trade,theme,entry_type,note_type,priority,action_required,is_open_loop,loop_resolved,resolved_at,transcript,claude_response";
     const query = supabaseUrl + "/rest/v1/voice_notes?select=" + cols + "&order=created_at.desc&limit=200";
     const dbResp = await fetch(query, {
       headers: { apikey: supabaseKey, Authorization: "Bearer " + supabaseKey }
