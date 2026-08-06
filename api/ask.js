@@ -84,13 +84,14 @@ module.exports = async (req, res) => {
         "type:" + (n.entry_type || n.note_type || ""),
         "priority:" + (n.priority || ""),
         "open_loop:" + n.is_open_loop,
+        "resolved:" + (n.loop_resolved === true ? "YES closed " + (n.resolved_at || "") : "no"),
         "action:" + (n.action_required || ""),
         "transcript:" + t,
         "summary:" + (n.claude_response || "")
       ].join(" | ");
     }).join("\n\n");
 
-    const systemPrompt = "You answer questions from Mike's field voice notes. Use only the notes provided. Be concise and practical, like a reply read on a phone at a job site. If the notes do not cover the question, say so plainly. When useful, cite the note date.";
+    const systemPrompt = "You answer questions from Mike's field voice notes. Use only the notes provided. Each note has open_loop and resolved fields. A note is only an active open loop if open_loop:true AND resolved:no. If a note shows resolved:YES, it is DONE and must never be listed as open, outstanding, or needing action, even if its text describes unfinished work. Never invent an id. Be concise and practical, like a reply read on a phone at a job site. If the notes do not cover the question, say so plainly. When useful, cite the note date.";
     const userPrompt = "Question: " + question + "\n\nNotes:\n" + context;
 
     // 3. Ask Claude
