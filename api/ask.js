@@ -31,6 +31,19 @@ async function sendChunks(token, chatId, text) {
   return chunks.length;
 }
 
+// Legacy JWT service_role keys need Authorization: Bearer to get elevated
+// privileges. Without it the request silently drops to the anon role, and
+// RLS with zero policies returns an empty set with no error. New sb_secret_
+// keys are the opposite: they are rejected on that header and go on apikey
+// alone. Detecting the key type here means rotating the key needs no code change.
+function supabaseHeaders(key) {
+  const h = { apikey: key };
+  if (!key.startsWith("sb_")) {
+    h.Authorization = "Bearer " + key;
+  }
+  return h;
+}
+
 module.exports = async (req, res) => {
   try {
     // Secret gate: every request must carry the matching header
@@ -64,13 +77,20 @@ module.exports = async (req, res) => {
     const cols = "id,created_at,work_or_personal,sub_or_person,job_name,trade,theme,entry_type,note_type,priority,action_required,is_open_loop,loop_resolved,resolved_at,transcript,claude_response";
     const query = supabaseUrl + "/rest/v1/voice_notes?select=" + cols + "&order=created_at.desc&limit=1000";
     const dbResp = await fetch(query, {
-      headers: { apikey: supabaseKey, Authorization: "Bearer " + supabaseKey }
+      headers: supabaseHeaders(supabaseKey)
     });
     if (!dbResp.ok) {
       const errText = await dbResp.text();
       return res.status(500).json({ ok: false, stage: "supabase", status: dbResp.status, error: errText });
     }
     const notes = await dbResp.json();
+
+    // Zero rows means the key was not accepted as service_role. Fail loudly
+    // rather than letting Claude answer confidently from an empty table.
+    if (!Array.isArray(notes) || notes.length === 0) {
+      await sendChunks(token, chatId, "Could not read your notes. The database returned zero rows, which usually means the Supabase key is not being accepted as service_role. Nothing was answered from real data.");
+      return res.status(500).json({ ok: false, stage: "supabase", error: "zero rows returned" });
+    }
 
     // Keep the payload sane as the table grows.
     const MAX_CHARS = 400000;
