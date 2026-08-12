@@ -8,13 +8,9 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Server missing Supabase key' });
   }
 
-  const headers = {
-    apikey: key,
-    Authorization: `Bearer ${key}`,
-    'Content-Type': 'application/json',
-  };
+  // apikey only. New-style sb_secret_ keys are rejected on Authorization.
+  const headers = { apikey: key, 'Content-Type': 'application/json' };
 
-  // GET is read-only: inspect a row without changing it.
   if (req.method === 'GET') {
     const id = parseInt(req.query.id, 10);
     if (!Number.isInteger(id)) {
@@ -30,7 +26,7 @@ export default async function handler(req, res) {
   }
 
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'GET to inspect, POST to resolve' });
+    return res.status(405).json({ error: 'POST to resolve' });
   }
 
   const id = parseInt(req.body && req.body.id, 10);
