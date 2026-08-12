@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body style="font-family:system-ui;padding:24px;font-size:17px">
+  <h2>Resolve tester</h2>
+  <input id="id" value="131" inputmode="numeric"
+         style="font-size:20px;padding:10px;width:140px">
+  <div style="margin-top:14px">
+    <button onclick="go('GET')"  style="font-size:18px;padding:12px 18px">Inspect</button>
+    <button onclick="go('POST')" style="font-size:18px;padding:12px 18px">Resolve</button>
+  </div>
+  <pre id="out" style="white-space:pre-wrap;margin-top:20px;background:#f2f2f2;padding:14px;border-radius:8px"></pre>
+<script>
+async function go(method) {
+  const id = document.getElementById('id').value;
+  const out = document.getElementById('out');
+  out.textContent = 'working...';
+  try {
+    const url = '/api/resolve-loop' + (method === 'GET' ? '?id=' + id : '');
+    const opts = method === 'POST'
+      ? { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: Number(id) }) }
+      : {};
+    const r = await fetch(url, opts);
+    out.textContent = r.status + '\n' + JSON.stringify(await r.json(), null, 2);
+  } catch (e) { out.textContent = 'ERROR ' + e; }
+}
+</script>
+</body>
+</html>
