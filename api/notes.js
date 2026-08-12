@@ -13,7 +13,8 @@ export default async function handler(req, res) {
   const columns = [
     'id', 'created_at', 'work_or_personal', 'sub_or_person', 'trade',
     'theme', 'entry_type', 'transcript', 'job_name', 'note_type',
-    'priority', 'action_required', 'is_open_loop', 'loop_resolved',
+    'priority', 'action_required', 'claude_response',
+    'is_open_loop', 'loop_resolved',
     'resolved_at'
   ].join(',');
 
