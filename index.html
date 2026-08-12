@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -53,7 +52,6 @@
 
     #refresh-btn:active { opacity: 0.7; }
 
-    /* View switcher (All Notes / Open Loops) */
     .view-switch {
       display: flex;
       gap: 8px;
@@ -219,7 +217,6 @@
       margin-top: 8px;
     }
 
-    /* Open loops view */
     .loops-header {
       font-size: 13px;
       color: #888;
@@ -385,8 +382,8 @@
 
   <div id="loops-view" style="display:none;">
     <div class="filters">
-      <button class="filter-btn" onclick="setLoopFilter('all', this)">All</button>
-      <button class="filter-btn active" onclick="setLoopFilter('JOBSITE', this)">&#127959;&#65039; Job Site</button>
+      <button class="filter-btn active" onclick="setLoopFilter('all', this)">All</button>
+      <button class="filter-btn" onclick="setLoopFilter('JOBSITE', this)">&#127959;&#65039; Job Site</button>
       <button class="filter-btn" onclick="setLoopFilter('GENERAL', this)">&#129504; General</button>
     </div>
     <div class="loops-header"><span id="loops-count">&mdash;</span> open loops</div>
@@ -396,13 +393,40 @@
   </div>
 
   <script>
-    const SUPABASE_URL = 'https://ecjmqwdijgsycbqkfcog.supabase.co';
-    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVjam1xd2RpamdzeWNicWtmY29nIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MDAxMzMxNSwiZXhwIjoyMDk1NTg5MzE1fQ.x6CP4ltoczdPZ-aV8UTci2DUSXzKlBEbubS35QKvqPY';
+    // No Supabase URL or key in this file. All database access goes through
+    // /api/notes (read) and /api/resolve-loop (write), which hold the
+    // service_role key server-side only.
+
+    let allNotes = [];
+    let notesLoaded = false;
 
     let activeFilter = 'all';
     let activePriority = 'all';
     let activeView = 'notes';
-    let activeLoopFilter = 'JOBSITE';
+    let activeLoopFilter = 'all';
+
+    async function fetchNotes(force) {
+      if (notesLoaded && !force) return allNotes;
+      const res = await fetch('/api/notes');
+      if (!res.ok) throw new Error(res.status + ' ' + res.statusText);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      allNotes = Array.isArray(data.rows) ? data.rows : [];
+      notesLoaded = true;
+      return allNotes;
+    }
+
+    // Anything that is not exactly JOBSITE or GENERAL is unclassified.
+    // This keeps null and malformed note_type values out of both buckets
+    // instead of silently vanishing.
+    function noteBucket(n) {
+      const t = String(n.note_type || '').trim().toUpperCase();
+      return (t === 'JOBSITE' || t === 'GENERAL') ? t : 'OTHER';
+    }
+
+    function isOpenLoop(n) {
+      return n.is_open_loop === true && n.loop_resolved !== true;
+    }
 
     function setFilter(filter, btn) {
       activeFilter = filter;
@@ -438,10 +462,13 @@
       } else {
         loopsView.style.display = 'none';
         notesView.style.display = 'block';
+        loadNotes();
       }
     }
 
+    // Refresh forces a re-fetch so it reflects notes recorded since page load.
     function refreshActiveView() {
+      notesLoaded = false;
       if (activeView === 'loops') loadOpenLoops();
       else loadNotes();
     }
@@ -486,17 +513,13 @@
       container.innerHTML = '<div class="loading">Loading your notes...</div>';
 
       try {
-        const typeFilter = activeFilter === 'all' ? '' : `&note_type=eq.${activeFilter}`;
-        const priorityFilter = activePriority === 'all' ? '' : `&priority=eq.${activePriority}`;
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/voice_notes?select=*&order=created_at.desc&limit=50${typeFilter}${priorityFilter}`, {
-          headers: {
-            'apikey': SUPABASE_KEY,
-            'Authorization': `Bearer ${SUPABASE_KEY}`
-          }
-        });
+        const all = await fetchNotes();
 
-        if (!res.ok) throw new Error(`${res.status} — ${res.statusText}`);
-        const notes = await res.json();
+        const notes = all.filter(n => {
+          if (activeFilter !== 'all' && noteBucket(n) !== activeFilter) return false;
+          if (activePriority !== 'all' && String(n.priority || '').toUpperCase() !== activePriority) return false;
+          return true;
+        });
 
         document.getElementById('total').textContent = notes.length;
         document.getElementById('today').textContent = notes.filter(n => isToday(n.created_at)).length;
@@ -506,7 +529,7 @@
           container.innerHTML = `
             <div class="empty">
               <div class="empty-icon">🎙️</div>
-              No voice notes yet.<br>Send one to your Telegram bot to get started.
+              No voice notes match this filter.
             </div>`;
           return;
         }
@@ -514,23 +537,23 @@
         container.innerHTML = notes.map(n => `
           <div class="note-card" id="card-${n.id}" onclick="toggleNote(${n.id})">
             <div class="note-top">
-              <div class="note-transcript collapsed" id="transcript-${n.id}">${n.transcript || 'No transcript'}</div>
+              <div class="note-transcript collapsed" id="transcript-${n.id}">${escapeHtml(n.transcript || 'No transcript')}</div>
               <div class="note-meta">
                 <div class="note-date">${formatDate(n.created_at)}</div>
-                <span class="priority-badge priority-${n.priority || 'null'}">${n.priority || '—'}</span>
+                <span class="priority-badge priority-${escapeHtml(n.priority || 'null')}">${escapeHtml(n.priority || '—')}</span>
               </div>
             </div>
             <div class="expand-hint" id="hint-${n.id}">Tap to expand</div>
             <div id="extraction-${n.id}" style="display:none;">
               <hr class="note-divider">
               <div class="extraction-label">Claude's extraction</div>
-              <div class="note-response">${n.claude_response || 'No extraction'}</div>
+              <div class="note-response">${escapeHtml(n.claude_response || 'No extraction')}</div>
             </div>
           </div>
         `).join('');
 
       } catch (err) {
-        container.innerHTML = `<div class="error">Failed to load notes: ${err.message}</div>`;
+        container.innerHTML = `<div class="error">Failed to load notes: ${escapeHtml(err.message)}</div>`;
       }
     }
 
@@ -539,16 +562,12 @@
       container.innerHTML = '<div class="loading">Loading open loops...</div>';
 
       try {
-        const typeFilter = activeLoopFilter === 'all' ? '' : `&note_type=eq.${activeLoopFilter}`;
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/voice_notes?select=*&is_open_loop=is.true&loop_resolved=not.is.true${typeFilter}&order=created_at.desc`, {
-          headers: {
-            'apikey': SUPABASE_KEY,
-            'Authorization': `Bearer ${SUPABASE_KEY}`
-          }
-        });
+        const all = await fetchNotes();
 
-        if (!res.ok) throw new Error(`${res.status} — ${res.statusText}`);
-        const loops = await res.json();
+        const loops = all
+          .filter(isOpenLoop)
+          .filter(n => activeLoopFilter === 'all' || noteBucket(n) === activeLoopFilter)
+          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
         document.getElementById('loops-count').textContent = loops.length;
 
@@ -567,7 +586,7 @@
           (groups[job] = groups[job] || []).push(n);
         });
 
-        container.innerHTML = Object.keys(groups).map(job => {
+        container.innerHTML = Object.keys(groups).sort().map(job => {
           const cards = groups[job].map(n => `
             <div class="loop-card" id="loop-card-${n.id}">
               <div class="loop-summary">${escapeHtml(n.claude_response || n.transcript || 'No summary')}</div>
@@ -585,7 +604,7 @@
         }).join('');
 
       } catch (err) {
-        container.innerHTML = `<div class="error">Failed to load open loops: ${err.message}</div>`;
+        container.innerHTML = `<div class="error">Failed to load open loops: ${escapeHtml(err.message)}</div>`;
       }
     }
 
@@ -594,38 +613,34 @@
       btnEl.textContent = 'Resolving...';
 
       try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/voice_notes?id=eq.${id}`, {
-          method: 'PATCH',
-          headers: {
-            'apikey': SUPABASE_KEY,
-            'Authorization': `Bearer ${SUPABASE_KEY}`,
-            'Content-Type': 'application/json',
-            'Prefer': 'return=representation'
-          },
-          body: JSON.stringify({
-            loop_resolved: true,
-            resolved_at: new Date().toISOString()
-          })
+        const res = await fetch('/api/resolve-loop', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: Number(id) })
         });
 
-        if (!res.ok) throw new Error(`${res.status} — ${res.statusText}`);
-
-        const updated = await res.json();
-        if (!updated.length) {
-          throw new Error('Nothing was updated. This is usually a row level security UPDATE policy blocking the write on voice_notes.');
+        const result = await res.json();
+        if (!res.ok || !result.ok) {
+          throw new Error(result.error || (res.status + ' ' + res.statusText));
         }
 
-        // Remove the resolved card, matched by its stable id.
+        // Keep the local cache honest so switching views does not resurrect it.
+        const cached = allNotes.find(n => Number(n.id) === Number(id));
+        if (cached) {
+          cached.loop_resolved = true;
+          cached.resolved_at = result.row && result.row.resolved_at;
+        }
+
         const card = document.getElementById('loop-card-' + id);
         if (card) {
           const group = card.closest('.job-group');
+          const countEl = group && group.querySelector('.job-count');
           card.remove();
-          // If that job has no remaining open loops, drop the whole group.
           if (group && !group.querySelector('.loop-card')) group.remove();
+          else if (countEl) countEl.textContent = group.querySelectorAll('.loop-card').length;
         }
 
-        // Update the count, and show the empty state if everything is cleared.
-        const remaining = container_loopCount();
+        const remaining = document.getElementById('loops-container').querySelectorAll('.loop-card').length;
         document.getElementById('loops-count').textContent = remaining;
         if (remaining === 0) {
           document.getElementById('loops-container').innerHTML = `
@@ -640,10 +655,6 @@
         btnEl.textContent = 'Resolve';
         alert('Could not resolve: ' + err.message);
       }
-    }
-
-    function container_loopCount() {
-      return document.getElementById('loops-container').querySelectorAll('.loop-card').length;
     }
 
     loadNotes();
