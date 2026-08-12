@@ -2,14 +2,19 @@ const SUPABASE_URL = 'https://ecjmqwdijgsycbqkfcog.supabase.co';
 
 const RETURN_COLS = 'id,transcript,is_open_loop,loop_resolved,resolved_at';
 
+function authHeaders(key) {
+  const h = { apikey: key, 'Content-Type': 'application/json' };
+  if (!key.startsWith('sb_')) h.Authorization = 'Bearer ' + key;
+  return h;
+}
+
 export default async function handler(req, res) {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!key) {
     return res.status(500).json({ error: 'Server missing Supabase key' });
   }
 
-  // apikey only. New-style sb_secret_ keys are rejected on Authorization.
-  const headers = { apikey: key, 'Content-Type': 'application/json' };
+  const headers = authHeaders(key);
 
   if (req.method === 'GET') {
     const id = parseInt(req.query.id, 10);
@@ -21,7 +26,9 @@ export default async function handler(req, res) {
       { headers }
     );
     const rows = await r.json();
-    if (!rows.length) return res.status(404).json({ error: 'No row with that id' });
+    if (!Array.isArray(rows) || !rows.length) {
+      return res.status(404).json({ error: 'No row returned. Check the id, or the key is not acting as service_role.' });
+    }
     return res.status(200).json({ mode: 'inspect', row: rows[0] });
   }
 
@@ -53,7 +60,9 @@ export default async function handler(req, res) {
     }
 
     const rows = await r.json();
-    if (!rows.length) return res.status(404).json({ error: 'No row with that id' });
+    if (!Array.isArray(rows) || !rows.length) {
+      return res.status(404).json({ error: 'Nothing was updated. Check the id, or the key is not acting as service_role.' });
+    }
 
     return res.status(200).json({ ok: true, row: rows[0] });
   } catch (err) {
