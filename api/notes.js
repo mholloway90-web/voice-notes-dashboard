@@ -14,8 +14,7 @@ export default async function handler(req, res) {
     'id', 'created_at', 'work_or_personal', 'sub_or_person', 'trade',
     'theme', 'entry_type', 'transcript', 'job_name', 'note_type',
     'priority', 'action_required', 'claude_response',
-    'is_open_loop', 'loop_resolved',
-    'resolved_at'
+    'is_open_loop', 'loop_resolved', 'resolved_at'
   ].join(',');
 
   const url =
@@ -25,12 +24,8 @@ export default async function handler(req, res) {
     `&limit=1000`;
 
   try {
-    const r = await fetch(url, {
-      headers: {
-        apikey: key,
-        Authorization: `Bearer ${key}`,
-      },
-    });
+    // apikey only. New-style sb_secret_ keys are rejected on Authorization.
+    const r = await fetch(url, { headers: { apikey: key } });
 
     if (!r.ok) {
       const detail = await r.text();
