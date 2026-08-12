@@ -1,5 +1,15 @@
 const SUPABASE_URL = 'https://ecjmqwdijgsycbqkfcog.supabase.co';
 
+// Legacy JWT service_role keys need Authorization: Bearer to get elevated
+// privileges. Without it the request drops to anon, and RLS with zero
+// policies returns an empty set with no error. New sb_secret_ keys are the
+// opposite: they are rejected on that header and must go on apikey alone.
+function authHeaders(key) {
+  const h = { apikey: key };
+  if (!key.startsWith('sb_')) h.Authorization = 'Bearer ' + key;
+  return h;
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'GET only' });
@@ -24,8 +34,7 @@ export default async function handler(req, res) {
     `&limit=1000`;
 
   try {
-    // apikey only. New-style sb_secret_ keys are rejected on Authorization.
-    const r = await fetch(url, { headers: { apikey: key } });
+    const r = await fetch(url, { headers: authHeaders(key) });
 
     if (!r.ok) {
       const detail = await r.text();
@@ -33,6 +42,14 @@ export default async function handler(req, res) {
     }
 
     const rows = await r.json();
+
+    // An empty result here means the request was silently downgraded to anon.
+    if (!rows.length) {
+      return res.status(502).json({
+        error: 'Zero rows returned. Key is not being accepted as service_role.'
+      });
+    }
+
     return res.status(200).json({ count: rows.length, rows });
   } catch (err) {
     return res.status(500).json({ error: String(err) });
