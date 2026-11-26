@@ -28,7 +28,8 @@ export async function sb(path, opts) {
 }
 
 // Trim so a stray space or line break pasted into Vercel doesn't lock you out.
-const secret = () => String(process.env.DASHBOARD_PASSWORD || '').trim();
+// Either name works: DASHBOARD_PASSWORD, or DASHBOARD_PASSWORD1 as set in Vercel.
+const secret = () => String(process.env.DASHBOARD_PASSWORD || process.env.DASHBOARD_PASSWORD1 || '').trim();
 
 function sign(value) {
   return crypto.createHmac('sha256', secret()).update(value).digest('hex');
