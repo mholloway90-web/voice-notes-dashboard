@@ -28,8 +28,11 @@ export async function sb(path, opts) {
 }
 
 // Trim so a stray space or line break pasted into Vercel doesn't lock you out.
-// Either name works: DASHBOARD_PASSWORD, or DASHBOARD_PASSWORD1 as set in Vercel.
-const secret = () => String(process.env.DASHBOARD_PASSWORD || process.env.DASHBOARD_PASSWORD1 || '').trim();
+// The password can live in DASHBOARD_PASSWORD or DASHBOARD_PASSWORD1 in Vercel.
+// If both are set, either value logs you in.
+const passwords = () => [process.env.DASHBOARD_PASSWORD, process.env.DASHBOARD_PASSWORD1]
+  .map((v) => String(v || '').trim()).filter(Boolean);
+const secret = () => passwords().join('|');
 
 function sign(value) {
   return crypto.createHmac('sha256', secret()).update(value).digest('hex');
@@ -45,10 +48,13 @@ export function clearSessionCookie() {
 }
 
 export function checkPassword(given) {
-  const real = secret();
   const a = crypto.createHash('sha256').update(String(given || '').trim()).digest();
-  const b = crypto.createHash('sha256').update(real).digest();
-  return real.length > 0 && crypto.timingSafeEqual(a, b);
+  let ok = false;
+  for (const real of passwords()) {
+    const b = crypto.createHash('sha256').update(real).digest();
+    if (crypto.timingSafeEqual(a, b)) ok = true;
+  }
+  return ok;
 }
 
 function isAuthed(req) {
