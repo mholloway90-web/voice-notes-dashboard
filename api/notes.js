@@ -1,57 +1,34 @@
-const SUPABASE_URL = 'https://ecjmqwdijgsycbqkfcog.supabase.co';
+import { sb, requireAuth } from './_lib.js';
 
-// Legacy JWT service_role keys need Authorization: Bearer to get elevated
-// privileges. Without it the request drops to anon, and RLS with zero
-// policies returns an empty set with no error. New sb_secret_ keys are the
-// opposite: they are rejected on that header and must go on apikey alone.
-function authHeaders(key) {
-  const h = { apikey: key };
-  if (!key.startsWith('sb_')) h.Authorization = 'Bearer ' + key;
-  return h;
-}
+const COLUMNS = [
+  'id', 'created_at', 'work_or_personal', 'sub_or_person', 'trade',
+  'theme', 'entry_type', 'kind', 'title', 'transcript', 'job_name', 'note_type',
+  'priority', 'action_required', 'claude_response',
+  'is_open_loop', 'loop_resolved', 'resolved_at', 'loop_code'
+].join(',');
 
+// One call gives the page everything it needs: notes, waiting items,
+// the contacts they point to, and open Duet handoffs.
 export default async function handler(req, res) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'GET only' });
-  }
-
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!key) {
-    return res.status(500).json({ error: 'Server missing Supabase key' });
-  }
-
-  const columns = [
-    'id', 'created_at', 'work_or_personal', 'sub_or_person', 'trade',
-    'theme', 'entry_type', 'transcript', 'job_name', 'note_type',
-    'priority', 'action_required', 'claude_response',
-    'is_open_loop', 'loop_resolved', 'resolved_at'
-  ].join(',');
-
-  const url =
-    `${SUPABASE_URL}/rest/v1/voice_notes` +
-    `?select=${columns}` +
-    `&order=created_at.desc` +
-    `&limit=1000`;
+  if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' });
+  if (!requireAuth(req, res)) return;
 
   try {
-    const r = await fetch(url, { headers: authHeaders(key) });
+    const [rows, waiting, contacts, handoffs] = await Promise.all([
+      sb(`voice_notes?select=${COLUMNS}&order=created_at.desc&limit=2000`),
+      sb('waiting_items?select=id,item,job,type,contact_id,date_asked,last_nudge,nudge_count,snooze_until,status,notes,source_note_id,created_at,closed_at&order=date_asked.asc&limit=500'),
+      sb('contacts?select=id,name,phone,role&limit=1000'),
+      sb('duet_handoffs?select=id,created_at,voice_note_id,request,job_name,status,done_at&order=created_at.desc&limit=500')
+    ]);
 
-    if (!r.ok) {
-      const detail = await r.text();
-      return res.status(502).json({ error: 'Supabase read failed', detail });
-    }
-
-    const rows = await r.json();
-
-    // An empty result here means the request was silently downgraded to anon.
+    // An empty notes table here means the key was silently downgraded to anon.
     if (!rows.length) {
-      return res.status(502).json({
-        error: 'Zero rows returned. Key is not being accepted as service_role.'
-      });
+      return res.status(502).json({ error: 'Zero rows returned. Key is not being accepted as service_role.' });
     }
 
-    return res.status(200).json({ count: rows.length, rows });
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(200).json({ count: rows.length, rows, waiting, contacts, handoffs });
   } catch (err) {
-    return res.status(500).json({ error: String(err) });
+    return res.status(502).json({ error: String(err.message || err) });
   }
 }

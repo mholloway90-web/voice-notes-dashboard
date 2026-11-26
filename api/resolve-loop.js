@@ -1,71 +1,26 @@
-const SUPABASE_URL = 'https://ecjmqwdijgsycbqkfcog.supabase.co';
+import { sb, requireAuth, body } from './_lib.js';
 
-const RETURN_COLS = 'id,transcript,is_open_loop,loop_resolved,resolved_at';
-
-function authHeaders(key) {
-  const h = { apikey: key, 'Content-Type': 'application/json' };
-  if (!key.startsWith('sb_')) h.Authorization = 'Bearer ' + key;
-  return h;
-}
-
+// POST {"id": 123}                    closes the loop
+// POST {"id": 123, "resolved": false} reopens it
 export default async function handler(req, res) {
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!key) {
-    return res.status(500).json({ error: 'Server missing Supabase key' });
-  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
+  if (!requireAuth(req, res)) return;
 
-  const headers = authHeaders(key);
-
-  if (req.method === 'GET') {
-    const id = parseInt(req.query.id, 10);
-    if (!Number.isInteger(id)) {
-      return res.status(400).json({ error: 'Pass a numeric ?id=' });
-    }
-    const r = await fetch(
-      `${SUPABASE_URL}/rest/v1/voice_notes?id=eq.${id}&select=${RETURN_COLS}`,
-      { headers }
-    );
-    const rows = await r.json();
-    if (!Array.isArray(rows) || !rows.length) {
-      return res.status(404).json({ error: 'No row returned. Check the id, or the key is not acting as service_role.' });
-    }
-    return res.status(200).json({ mode: 'inspect', row: rows[0] });
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'POST to resolve' });
-  }
-
-  const id = parseInt(req.body && req.body.id, 10);
-  if (!Number.isInteger(id)) {
-    return res.status(400).json({ error: 'Body must be {"id": <number>}' });
-  }
+  const b = body(req);
+  const id = parseInt(b.id, 10);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'Body must be {"id": <number>}' });
+  const resolved = b.resolved !== false;
 
   try {
-    const r = await fetch(
-      `${SUPABASE_URL}/rest/v1/voice_notes?id=eq.${id}&select=${RETURN_COLS}`,
-      {
-        method: 'PATCH',
-        headers: { ...headers, Prefer: 'return=representation' },
-        body: JSON.stringify({
-          loop_resolved: true,
-          resolved_at: new Date().toISOString(),
-        }),
-      }
-    );
-
-    if (!r.ok) {
-      const detail = await r.text();
-      return res.status(502).json({ error: 'Supabase write failed', detail });
-    }
-
-    const rows = await r.json();
-    if (!Array.isArray(rows) || !rows.length) {
-      return res.status(404).json({ error: 'Nothing was updated. Check the id, or the key is not acting as service_role.' });
-    }
-
+    const patch = resolved
+      ? { loop_resolved: true, resolved_at: new Date().toISOString(), resolved_via: 'dashboard' }
+      : { loop_resolved: false, resolved_at: null, resolved_via: null };
+    const rows = await sb(`voice_notes?id=eq.${id}&select=id,is_open_loop,loop_resolved,resolved_at`, {
+      method: 'PATCH', headers: { Prefer: 'return=representation' }, body: patch
+    });
+    if (!rows || !rows.length) return res.status(404).json({ error: 'Nothing was updated. Check the id.' });
     return res.status(200).json({ ok: true, row: rows[0] });
   } catch (err) {
-    return res.status(500).json({ error: String(err) });
+    return res.status(502).json({ error: String(err.message || err) });
   }
 }
