@@ -3,7 +3,7 @@
 // server side and checks the login cookie on every call.
 
 const S = {
-  notes: [], waiting: [], contacts: {}, handoffs: [], loaded: false,
+  notes: [], waiting: [], contacts: {}, handoffs: [], archived: {}, loaded: false,
   jobsFilter: 'active', jobType: 'all', loopsScope: 'all', waitingTab: 'open',
   vaultTab: 'all', vaultQuery: '',
   expanded: new Set(), editing: null, handoffing: null
@@ -74,6 +74,11 @@ function learnNames() {
 }
 const jobName = (k) => display[k] || k;
 const jobHref = (k) => '#/job/' + encodeURIComponent(k);
+// A job stays archived until a new note comes in for it.
+function isArchived(j) {
+  const a = S.archived[j.key];
+  return !!a && new Date(j.last.created_at) <= new Date(a.archived_at);
+}
 
 /* ---------- note helpers ---------- */
 const isOpen = (n) => n.is_open_loop === true && n.loop_resolved !== true;
@@ -126,6 +131,8 @@ async function load(force) {
     S.notes = d.rows || [];
     S.waiting = d.waiting || [];
     S.handoffs = d.handoffs || [];
+    S.archived = {};
+    (d.archived || []).forEach((a) => { S.archived[a.job_key] = a; });
     S.contacts = {};
     (d.contacts || []).forEach((c) => { S.contacts[c.id] = c; });
     S.loaded = true;
@@ -250,21 +257,23 @@ function statusPill(age) {
 function viewJobs() {
   const all = jobsData();
   const general = all.find((j) => j.key === 'general');
-  const jobs = all.filter((j) => j.key !== 'general').sort((a, b) => a.age - b.age);
-  const shown = jobs.filter((j) => S.jobsFilter === 'all' || (S.jobsFilter === 'active' ? j.age < 14 : j.age >= 14));
+  const everyJob = all.filter((j) => j.key !== 'general').sort((a, b) => a.age - b.age);
+  const archived = everyJob.filter(isArchived);
+  const jobs = everyJob.filter((j) => !isArchived(j));
+  const shown = S.jobsFilter === 'archived' ? archived : jobs.filter((j) => S.jobsFilter === 'all' || (S.jobsFilter === 'active' ? j.age < 14 : j.age >= 14));
   const now = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
   const genOpen = general ? general.notes.filter(isOpen) : [];
   const genStale = genOpen.filter((n) => daysSince(n.created_at) >= 14).length;
   return `
   <div class="page-head">
     <div><p class="eyebrow">${esc(now)}</p><h1>Jobs</h1></div>
-    ${chips('jobsFilter', [['active', 'Active', jobs.filter((j) => j.age < 14).length], ['quiet', 'Quiet 14+ days', jobs.filter((j) => j.age >= 14).length], ['all', 'All jobs', jobs.length]], S.jobsFilter)}
+    ${chips('jobsFilter', [['active', 'Active', jobs.filter((j) => j.age < 14).length], ['quiet', 'Quiet 14+ days', jobs.filter((j) => j.age >= 14).length], ['all', 'All jobs', jobs.length]].concat(archived.length ? [['archived', 'Archived', archived.length]] : []), S.jobsFilter)}
   </div>
   ${shown.length ? `<div class="grid">${shown.map((j) => `
     <a class="job-card" href="${jobHref(j.key)}">
       <div class="job-top">
         <div style="min-width:0"><h2>${esc(jobName(j.key))}</h2>${j.who ? `<p class="who">${esc(j.who)}</p>` : ''}</div>
-        ${statusPill(j.age)}
+        ${isArchived(j) ? '<span class="pill quiet">Archived</span>' : statusPill(j.age)}
       </div>
       <p class="last">${esc(title(j.last))}</p>
       <div class="counts">
@@ -272,7 +281,7 @@ function viewJobs() {
         <span class="${j.waiting ? 'hot' : ''}"><strong>${j.waiting}</strong> waiting</span>
         <span class="right">${j.notes.length} note${j.notes.length === 1 ? '' : 's'} · ${esc(fmtDate(j.last.created_at))}</span>
       </div>
-    </a>`).join('')}</div>` : '<div class="empty">No jobs in this view.</div>'}
+    </a>`).join('')}</div>` : `<div class="empty">${S.jobsFilter === 'archived' ? 'No archived jobs.' : 'No jobs in this view.'}</div>`}
   ${general ? `
   <h2 class="section-title">Not tied to a job</h2>
   <a class="general-card" href="${jobHref('general')}">
@@ -305,6 +314,9 @@ function viewJob(key) {
     <div><h1>${esc(key === 'general' ? 'General and personal' : jobName(key))}</h1>
       <p class="sub">${[j.who, variants.length ? 'also logged as ' + variants.map((v) => '“' + v + '”').join(', ') : '', j.notes.length + ' notes'].filter(Boolean).map(esc).join(' · ')}</p></div>
     <div class="stats">
+      ${key === 'general' ? '' : isArchived(j)
+        ? `<button class="btn dark" style="align-self:center" data-act="unarchive" data-key="${esc(key)}">Bring back</button>`
+        : `<button class="btn" style="align-self:center" data-act="archive" data-key="${esc(key)}">Archive job</button>`}
       <span><strong>${j.open}</strong>open loops</span>
       <span><strong>${waiting.length}</strong>waiting</span>
       <span><strong>${esc(fmtDate(j.last.created_at))}</strong>last note</span>
@@ -502,6 +514,7 @@ document.addEventListener('click', async (e) => {
   if (a) {
     const id = Number(a.dataset.id);
     const act = a.dataset.act;
+    if (act === 'archive' || act === 'unarchive') { archiveJob(a.dataset.key, act === 'archive', a); return; }
     if (act === 'expand') { S.expanded.has(id) ? S.expanded.delete(id) : S.expanded.add(id); render(); }
     else if (act === 'close') setLoop(id, true, a);
     else if (act === 'reopen') setLoop(id, false, a);
@@ -524,6 +537,18 @@ document.addEventListener('click', async (e) => {
     render();
   }
 });
+async function archiveJob(key, archived, btn) {
+  if (archived && S.notes.some((n) => isOpen(n) && jobKeys(n).includes(key))
+      && !confirm('This job still has open loops. Archive it anyway? The loops stay open.')) return;
+  btn.disabled = true;
+  try {
+    const d = await api('/api/archive-job', { method: 'POST', body: { key, name: jobName(key), archived } });
+    if (archived) S.archived[key] = d.row; else delete S.archived[key];
+    toast(archived ? jobName(key) + ' archived' : jobName(key) + ' is back on the board');
+    if (archived) { S.jobsFilter = 'active'; location.hash = '#/jobs'; }
+  } catch (e) { if (e.message !== 'login') toast('Could not update: ' + e.message); }
+  render();
+}
 function focusForm(id) {
   const f = document.querySelector(`form[data-id="${id}"]`);
   if (f) { const el = f.querySelector('textarea, input, select'); if (el) el.focus(); }

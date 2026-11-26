@@ -14,11 +14,12 @@ export default async function handler(req, res) {
   if (!requireAuth(req, res)) return;
 
   try {
-    const [rows, waiting, contacts, handoffs] = await Promise.all([
+    const [rows, waiting, contacts, handoffs, archived] = await Promise.all([
       sb(`voice_notes?select=${COLUMNS}&order=created_at.desc&limit=2000`),
       sb('waiting_items?select=id,item,job,type,contact_id,date_asked,last_nudge,nudge_count,snooze_until,status,notes,source_note_id,created_at,closed_at&order=date_asked.asc&limit=500'),
       sb('contacts?select=id,name,phone,role&limit=1000'),
-      sb('duet_handoffs?select=id,created_at,voice_note_id,request,job_name,status,done_at&order=created_at.desc&limit=500')
+      sb('duet_handoffs?select=id,created_at,voice_note_id,request,job_name,status,done_at&order=created_at.desc&limit=500'),
+      sb('archived_jobs?select=job_key,display_name,archived_at')
     ]);
 
     // An empty notes table here means the key was silently downgraded to anon.
@@ -27,7 +28,7 @@ export default async function handler(req, res) {
     }
 
     res.setHeader('Cache-Control', 'no-store');
-    return res.status(200).json({ count: rows.length, rows, waiting, contacts, handoffs });
+    return res.status(200).json({ count: rows.length, rows, waiting, contacts, handoffs, archived });
   } catch (err) {
     return res.status(502).json({ error: String(err.message || err) });
   }
