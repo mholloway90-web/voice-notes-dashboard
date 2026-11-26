@@ -27,8 +27,11 @@ export async function sb(path, opts) {
   return text ? JSON.parse(text) : null;
 }
 
+// Trim so a stray space or line break pasted into Vercel doesn't lock you out.
+const secret = () => String(process.env.DASHBOARD_PASSWORD || '').trim();
+
 function sign(value) {
-  return crypto.createHmac('sha256', process.env.DASHBOARD_PASSWORD).update(value).digest('hex');
+  return crypto.createHmac('sha256', secret()).update(value).digest('hex');
 }
 
 export function makeSessionCookie() {
@@ -41,14 +44,14 @@ export function clearSessionCookie() {
 }
 
 export function checkPassword(given) {
-  const real = process.env.DASHBOARD_PASSWORD || '';
-  const a = crypto.createHash('sha256').update(String(given || '')).digest();
+  const real = secret();
+  const a = crypto.createHash('sha256').update(String(given || '').trim()).digest();
   const b = crypto.createHash('sha256').update(real).digest();
   return real.length > 0 && crypto.timingSafeEqual(a, b);
 }
 
 function isAuthed(req) {
-  if (!process.env.DASHBOARD_PASSWORD) return false;
+  if (!secret()) return false;
   const raw = req.headers.cookie || '';
   const m = raw.match(new RegExp('(?:^|;\\s*)' + COOKIE + '=([^;]+)'));
   if (!m) return false;
@@ -60,7 +63,7 @@ function isAuthed(req) {
 
 // Returns true when the request may proceed. Otherwise it has already replied.
 export function requireAuth(req, res) {
-  if (!process.env.DASHBOARD_PASSWORD) {
+  if (!secret()) {
     res.status(503).json({ error: 'setup', message: 'DASHBOARD_PASSWORD is not set in Vercel yet.' });
     return false;
   }

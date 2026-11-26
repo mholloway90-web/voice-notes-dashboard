@@ -6,7 +6,7 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true });
   }
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
-  if (!process.env.DASHBOARD_PASSWORD) {
+  if (!String(process.env.DASHBOARD_PASSWORD || '').trim()) {
     return res.status(503).json({ error: 'setup', message: 'DASHBOARD_PASSWORD is not set in Vercel yet.' });
   }
   // Small fixed delay slows down password guessing.

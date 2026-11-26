@@ -439,7 +439,7 @@ function showLogin() {
     <h1>Command Center</h1>
     <p class="sub" style="margin:0">Enter your dashboard password.</p>
     <label class="sr" for="pw">Password</label>
-    <input id="pw" name="password" type="password" autocomplete="current-password" required autofocus>
+    <input id="pw" name="password" type="password" autocomplete="current-password" autocapitalize="off" autocorrect="off" spellcheck="false" required autofocus>
     <p class="err" id="login-err"></p>
     <button class="btn solid" type="submit">Sign in</button>
   </form>`;
@@ -542,7 +542,7 @@ document.addEventListener('submit', async (e) => {
     try {
       const r = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: data.password }) });
       const d = await r.json().catch(() => ({}));
-      if (!r.ok) { err.textContent = d.error === 'setup' ? d.message : (d.error || 'Could not sign in'); return; }
+      if (!r.ok) { err.textContent = d.error === 'setup' ? d.message : d.error === 'Wrong password' ? 'Wrong password. It has to match DASHBOARD_PASSWORD in Vercel exactly, capitals included.' : (d.error || 'Could not sign in'); return; }
       app.innerHTML = '<div class="loading">Loading your notes…</div>';
       boot();
     } catch (x) { err.textContent = x.message; }
